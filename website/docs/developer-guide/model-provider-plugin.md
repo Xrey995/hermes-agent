@@ -169,6 +169,10 @@ The client your `create_client` returns receives `command` and `args` in `client
 
 For interruptible non-HTTP requests, implement a class-declared `cancel(self)` method. Hermes calls it from the interrupting thread after marking the request client unusable. It must return promptly and safely stop its own transport, including cancellation racing process startup; it must not close file descriptors owned by the request thread. The request owner still calls `close()` for cleanup. Clients without this method retain the existing socket-shutdown cancellation path.
 
+A provider may set `steering_as_user_message=True` if its transport accepts genuine user corrections after a completed tool batch. Hermes then appends queued human steering as a canonical user message (including durable session replay), instead of embedding a marker in tool output. Only the actual steering queue uses this route; tool text is never parsed or promoted. The default remains marked tool-result delivery for existing providers. This preserves instruction provenance, not a guarantee that a model obeys every correction.
+
+Explicit external-process delegation retains the selected provider and its protocol when resolving the child command; an executable override alone does not change an external-process provider into ACP.
+
 ## Hook reference examples
 
 Look at these bundled plugins for idioms:

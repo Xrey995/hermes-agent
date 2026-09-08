@@ -16,6 +16,20 @@ from tools.interrupt import set_interrupt as _set_interrupt
 logger = logging.getLogger("run_agent")
 
 
+def uses_user_steering(agent) -> bool:
+    from providers import get_provider_profile
+    profile = get_provider_profile(getattr(agent, "provider", ""))
+    return getattr(profile, "steering_as_user_message", False) is True
+
+
+def append_user_steering(agent, messages: list, text: str) -> bool:
+    """Route actual queued user input, never text parsed from tool output."""
+    if not uses_user_steering(agent):
+        return False
+    messages.append({"role": "user", "content": text})
+    return True
+
+
 def _fence_cancel_before_commit(fence, *, when_in_flight: bool, failure_log: str) -> None:
     """Call ``type(fence).cancel_before_commit(fence)`` when ``commit_in_flight`` matches.
 

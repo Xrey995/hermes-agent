@@ -3147,9 +3147,8 @@ def _requeue_pending_steer(agent, steer_text: str) -> None:
 
 
 def apply_pending_steer_to_tool_results(agent, messages: list, num_tool_msgs: int) -> None:
-    """Append pending /steer text to the last ``role:"tool"`` message of this batch (bounded by
-    ``num_tool_msgs``), marked as user-origin. Modifies existing content only, so role
-    alternation is preserved."""
+    """Deliver queued user steering after this batch. Legacy providers use a marked
+    tool result; opted-in providers preserve it as a separate canonical user message."""
     if num_tool_msgs <= 0 or not messages:
         return
     steer_text = agent._drain_pending_steer()
@@ -3161,6 +3160,9 @@ def apply_pending_steer_to_tool_results(agent, messages: list, num_tool_msgs: in
     if target is None:
         # No tool result in this batch (e.g. all skipped by interrupt).
         _requeue_pending_steer(agent, steer_text)
+        return
+    from agent.interrupt_control import append_user_steering
+    if append_user_steering(agent, messages, steer_text):
         return
     marker = format_steer_marker(steer_text)
     existing_content = target.get("content", "")

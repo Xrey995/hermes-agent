@@ -125,8 +125,7 @@ def prepare_iteration(agent: Any,*, messages: Any, api_call_count: Any) -> Itera
     except Exception:
         logger.debug("Nous key pre-expiry adoption failed", exc_info=True)
 
-    # Drain a /steer sent during the last API call into the newest tool message so
-    # it lands THIS iteration. Never put in a user message (breaks alternation).
+    # Drain actual user steering this iteration using the provider's declared delivery role.
     _pre_api_steer = agent._drain_pending_steer()
     if _pre_api_steer:
         _inject_steer_into_newest_tool_result(agent, messages, _pre_api_steer)
@@ -209,8 +208,11 @@ def _previous_tool_round(messages: Any) -> list:
 
 
 def _inject_steer_into_newest_tool_result(agent: Any, messages: Any, steer_text: str) -> None:
-    """Append the steer marker to the newest tool message; with no tool message, put the
-    text back so the post-tool-execution drain delivers it later."""
+    """Deliver real queued steering using the declared role; legacy routes without
+    a tool result requeue it for the post-tool-execution drain."""
+    from agent.interrupt_control import append_user_steering
+    if append_user_steering(agent, messages, steer_text):
+        return
     for _si in range(len(messages) - 1, -1, -1):
         _sm = messages[_si]
         if isinstance(_sm, dict) and _sm.get("role") == "tool":

@@ -78,6 +78,9 @@ class ProviderProfile:
     # top-level fields rather than ignoring them.
     supports_prompt_cache_key: bool = False
 
+    # Opt in only when real user input after a tool batch is accepted by the transport.
+    steering_as_user_message: bool = False
+
     # ── External-process providers (auth_type="external_process") ──
     # An agent CLI driven over stdio (ACP) rather than an HTTP endpoint. These
     # describe how to launch it; hermes_cli/auth.py's
