@@ -23,7 +23,11 @@ def uses_user_steering(agent) -> bool:
 
 
 def append_user_steering(agent, messages: list, text: str) -> bool:
-    """Route actual queued user input, never text parsed from tool output."""
+    """Route actual queued input; coalesce adjacent users on the wire, not in storage.
+
+    A trailing user may already be durable or have a clean-content override and an
+    exact-wire sidecar. Mutating it here would lose steering on flush or replay.
+    """
     if not uses_user_steering(agent):
         return False
     messages.append({"role": "user", "content": text})

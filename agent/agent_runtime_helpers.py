@@ -519,9 +519,9 @@ def _prune_unanswered_tool_calls(messages: List[Dict]) -> Tuple[List[Dict], int]
     return pruned, repairs
 
 
-def _merge_consecutive_users(messages: List[Dict]) -> Tuple[List[Dict], int]:
+def _merge_consecutive_users(messages: List[Dict], *, preserve_durable: bool = False) -> Tuple[List[Dict], int]:
     """Pass 3: merge consecutive plain-text user messages (no user input lost)."""
-    from agent.context_compressor import split_user_originated_turn
+    from agent.context_compressor import _DB_PERSISTED_MARKER, split_user_originated_turn
 
     repairs = 0
     merged: List[Dict] = []
@@ -530,6 +530,12 @@ def _merge_consecutive_users(messages: List[Dict]) -> Tuple[List[Dict], int]:
         if (
             prev is not None and prev.get("role") == "user"
             and isinstance(msg, dict) and msg.get("role") == "user"
+            # Durable rows stay append-only even after switching away from a
+            # user-steering provider. Merge only the request copies instead.
+            and not (preserve_durable and any(
+                row.get(key) for row in (prev, msg)
+                for key in (_DB_PERSISTED_MARKER, "_row_id", "api_content")
+            ))
             # A summary carrier followed by a new user row is a deliberate durable shape after
             # retry/rewind; never mutate the persisted carrier (sanitizers merge copies later).
             and split_user_originated_turn(prev)[0] is None
@@ -566,8 +572,20 @@ def repair_message_sequence(agent, messages: List[Dict]) -> int:
         return 0
     repairs = 0
     current = messages
+    from agent.interrupt_control import uses_user_steering
+    keep_user_rows = uses_user_steering(agent)
     for repair_pass in _SEQUENCE_REPAIR_PASSES:
-        current, made = repair_pass(current)
+        # Real steering must retain its own durable row: merging into an already
+        # flushed user loses the input, and drops that user's exact-wire sidecar.
+        # Request assembly coalesces user copies after restoring those sidecars.
+        if keep_user_rows and repair_pass is _merge_consecutive_users:
+            continue
+        if repair_pass is _merge_consecutive_users:
+            # agent=None is the explicitly requested storage-reader projection,
+            # not a working transcript that can later flush back to the DB.
+            current, made = _merge_consecutive_users(current, preserve_durable=agent is not None)
+        else:
+            current, made = repair_pass(current)
         repairs += made
     if repairs > 0:
         # Rewrite in place so persistence/return value/DB flush see the repaired sequence.
